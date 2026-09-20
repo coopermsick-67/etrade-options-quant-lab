@@ -1,0 +1,1 @@
+"""Documented E*TRADE adapter."""

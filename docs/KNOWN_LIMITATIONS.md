@@ -1,0 +1,10 @@
+# Known limitations
+
+- Robinhood options live trading is disabled: no official public brokerage-options API covering the required chain/quote/order capabilities was verified.
+- E*TRADE public docs were sufficient to document the OAuth/market/account/order surface, but production credentials, account approval, market-data entitlements, and current account permissions were not available in this workspace.
+- E*TRADE sandbox responses are not a realistic paper market. The internal paper broker is the correct research fill path.
+- No point-in-time historical option-chain vendor dataset is bundled, so no serious options backtest or profitability conclusion is claimed.
+- Persistence/audit storage is still MVP-level in-memory for paper/approval state; production must add durable encrypted storage and migrations.
+- The dashboard uses deterministic demo/sample data when no provider is configured.
+- GARCH, Heston, event calendars, multi-leg paper execution, assignment/exercise lifecycle, portfolio covariance, calibration plots, and full walk-forward orchestration are interfaces/roadmap items rather than completed production features.
+- Quotes, Greeks, and fills are not guaranteed accurate or executable. This software is not financial advice and does not guarantee profitability.

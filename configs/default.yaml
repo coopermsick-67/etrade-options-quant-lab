@@ -1,0 +1,24 @@
+account:
+  reference_equity: 10000
+risk:
+  target_risk_per_trade_pct: 0.005
+  normal_max_risk_per_trade_pct: 0.01
+  absolute_max_risk_per_trade_pct: 0.02
+  max_total_open_defined_risk_pct: 0.08
+  daily_warning_pct: 0.02
+  daily_hard_stop_pct: 0.03
+  weekly_warning_pct: 0.04
+  weekly_hard_stop_pct: 0.05
+  drawdown_warning_pct: 0.075
+  drawdown_hard_stop_pct: 0.10
+  max_spread_pct: 0.08
+  min_volume: 1
+  min_open_interest: 1
+kelly:
+  enabled_for_research: true
+  fraction: 0.25
+strategy:
+  min_dte: 14
+  max_dte: 45
+  max_spread_pct: 0.08
+  min_open_interest: 500

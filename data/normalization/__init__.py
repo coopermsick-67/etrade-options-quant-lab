@@ -1,0 +1,1 @@
+"""Normalized contract representations."""
