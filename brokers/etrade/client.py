@@ -77,8 +77,26 @@ class ETradeClient:
     def list_accounts(self) -> dict[str, Any]:
         return self._request("GET", "/accounts/list")
 
-    def get_balances(self, account_id_key: str) -> dict[str, Any]:
-        return self._request("GET", f"/accounts/{quote(account_id_key, safe='')}/margin")
+    def get_balances(
+        self,
+        account_id_key: str,
+        institution_type: str = "BROKERAGE",
+        account_type: str | None = None,
+        real_time_nav: bool = True,
+    ) -> dict[str, Any]:
+        if not institution_type.strip():
+            raise ETradeConfigurationError("institution_type is required")
+        params: dict[str, Any] = {
+            "instType": institution_type.strip().upper(),
+            "realTimeNAV": str(real_time_nav).lower(),
+        }
+        if account_type is not None:
+            if not account_type.strip():
+                raise ETradeConfigurationError("account_type must not be blank")
+            params["accountType"] = account_type.strip().upper()
+        return self._request(
+            "GET", f"/accounts/{quote(account_id_key, safe='')}/balance", params=params
+        )
 
     def get_portfolio(self, account_id_key: str) -> dict[str, Any]:
         return self._request("GET", f"/accounts/{quote(account_id_key, safe='')}/portfolio")

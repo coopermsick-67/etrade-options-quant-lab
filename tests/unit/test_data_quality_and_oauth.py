@@ -71,7 +71,9 @@ def test_etrade_client_wraps_transport_errors_and_quotes_path_identifiers() -> N
         client.get_balances("account/key")
     assert error.value.status_code == 401
     called_url = client.session.request.call_args.args[1]
-    assert "/accounts/account%2Fkey/margin" in called_url
+    assert "/accounts/account%2Fkey/balance" in called_url
+    called_kwargs = client.session.request.call_args.kwargs
+    assert called_kwargs["params"] == {"instType": "BROKERAGE", "realTimeNAV": "true"}
 
 
 def test_etrade_client_quotes_path_symbols_without_allowing_path_injection() -> None:
