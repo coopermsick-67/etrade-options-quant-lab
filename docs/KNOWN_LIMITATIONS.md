@@ -6,6 +6,6 @@
 - No point-in-time historical option-chain vendor dataset is bundled, so no serious options backtest or profitability conclusion is claimed.
 - Persistence/audit storage is still MVP-level in-memory for paper/approval state; production must add durable encrypted storage and migrations.
 - The dashboard has no authenticated live-approval workflow yet. The live approval API is deliberately fail-closed, so E*TRADE live execution is not enabled by default or by the shipped UI.
-- The dashboard uses deterministic demo/sample data when no provider is configured.
+- The dashboard uses truthful empty states when no provider is configured. Synthetic data exists only in explicit unit-test and math-validation surfaces.
 - GARCH, Heston, event calendars, multi-leg paper execution, assignment/exercise lifecycle, portfolio covariance, calibration plots, and full walk-forward orchestration are interfaces/roadmap items rather than completed production features.
 - Quotes, Greeks, and fills are not guaranteed accurate or executable. This software is not financial advice and does not guarantee profitability.

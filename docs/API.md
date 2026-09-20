@@ -7,7 +7,17 @@ The local FastAPI application exposes:
 | `GET /health` | Application status, mode, and live flag. |
 | `GET /health/etrade` | Non-ordering E*TRADE connection status. |
 | `GET /api/capabilities` | Explicit broker/mode capabilities. |
-| `GET /api/dashboard` | Demo/research dashboard payload. |
+| `GET /api/dashboard` | Runtime paper-account dashboard; market-data fields remain empty until a provider is configured. |
+| `GET /api/system/status` | Non-secret runtime and broker capability status. |
+| `GET /api/settings/public` | Non-secret configuration for the workspace UI. |
+| `GET /api/data/status` | Market-data provider configuration and freshness status. |
+| `GET /api/market/quote` | Authorized-provider quote lookup; unavailable when no provider is configured. |
+| `GET /api/market/option-chain` | Authorized-provider option-chain lookup; unavailable when no provider is configured. |
+| `GET /api/scanner` | Data-backed scanner surface; returns no candidates when required inputs are unavailable. |
+| `GET /api/paper/orders` | Current internal paper-order records. |
+| `GET /api/risk` | Current deterministic risk limits and paper-account utilization. |
+| `GET /api/journal` | Current paper-order journal. |
+| `GET /api/backtests` | Recorded backtest runs, if persisted by a validated workflow. |
 | `GET /api/math/demo` | Deterministic pricing, Greeks, IV, EV/simulation, Bayesian, and XYZ validation payload. |
 | `GET /api/paper/portfolio` | Current internal paper cash/equity/positions. |
 | `POST /api/paper/orders` | Submit a validated paper order; client order IDs are idempotent. |

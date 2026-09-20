@@ -85,3 +85,18 @@ def test_invalid_paper_quote_is_a_client_error_not_a_server_error() -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_invalid_paper_action_is_a_client_error_not_a_server_error() -> None:
+    response = client.post(
+        "/api/paper/orders",
+        json={
+            "symbol": "SPY-BAD-ACTION",
+            "action": "AUTOTRADE",
+            "quantity": 1,
+            "limit_price": 1.20,
+            "bid": 1.00,
+            "ask": 1.10,
+        },
+    )
+    assert response.status_code == 422

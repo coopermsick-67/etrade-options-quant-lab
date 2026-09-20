@@ -1,4 +1,8 @@
-"""Deterministic demo payloads used when no broker is connected."""
+"""Explicit math-validation payloads.
+
+These calculations are returned only from ``/api/math/demo`` or the validation
+CLI. They are never used to populate the operational dashboard.
+"""
 
 from __future__ import annotations
 
@@ -7,100 +11,11 @@ from typing import Any
 
 import numpy as np
 
-from data.providers.mock import MockMarketDataProvider
 from quant.pricing.black_scholes import OptionType, bs_greeks, bs_price, implied_volatility
 from quant.pricing.payoffs import long_call_profit
 from quant.probability.bayesian import beta_binomial_update
 from quant.simulation.monte_carlo import simulate_payoff
-from quant.volatility.estimators import (
-    expected_move,
-    iv_percentile,
-    iv_rank,
-)
-from strategies.spreads.bull_call import build_bull_call_spread
-
-
-def build_candidate_rows(provider: MockMarketDataProvider) -> list[dict[str, Any]]:
-    candidates: list[dict[str, Any]] = []
-    for symbol, _strategy in (
-        ("SPY", "Bull call spread"),
-        ("AAPL", "Bull call spread"),
-        ("IWM", "Bull call spread"),
-    ):
-        chain = provider.get_option_chain(symbol)
-        calls = [row for row in chain if row.option_type.value == "CALL"]
-        candidate = build_bull_call_spread(calls[2], calls[3], forecast_volatility=0.19)
-        item = asdict(candidate)
-        item["legs"] = [asdict(leg) for leg in candidate.legs]
-        item["expiration"] = candidate.legs[0].expiration.isoformat()
-        item["status"] = "Model watch" if symbol == "AAPL" else "Model signal"
-        candidates.append(item)
-    return candidates
-
-
-def build_dashboard_payload() -> dict[str, Any]:
-    provider = MockMarketDataProvider()
-    candidates = build_candidate_rows(provider)
-    equity_curve = [10_000 + x for x in (0, 42, 35, 88, 65, 121, 93, 168, 145, 214, 198, 342.56)]
-    return {
-        "mode": "PAPER",
-        "demo": True,
-        "broker_status": {"etrade": "disconnected", "robinhood": "live unavailable"},
-        "live_enabled": False,
-        "account": {
-            "equity": equity_curve[-1],
-            "daily_pnl": 121.18,
-            "buying_power": 8451.22,
-            "open_risk": 1213.0,
-            "portfolio_delta": -18.4,
-            "portfolio_vega": 312.7,
-            "cash": 8451.22,
-            "drawdown": -0.012,
-        },
-        "equity_curve": [
-            {"label": f"T{i + 1}", "value": value} for i, value in enumerate(equity_curve)
-        ],
-        "risk_limits": [
-            {"label": "Max position size", "value": 2000, "used": 0.61},
-            {"label": "Max portfolio delta", "value": 500, "used": 0.04},
-            {"label": "Max portfolio vega", "value": 1000, "used": 0.31},
-            {"label": "Daily loss limit", "value": 500, "used": 0.25},
-            {"label": "Total drawdown limit", "value": 2000, "used": 0.17},
-        ],
-        "candidates": candidates,
-        "recent_activity": [
-            {
-                "time": "10:21 AM",
-                "symbol": "AAPL",
-                "action": "Close (Paper)",
-                "details": "Sold 1x AAPL call spread",
-                "status": "Filled",
-            },
-            {
-                "time": "09:47 AM",
-                "symbol": "SPY",
-                "action": "Open (Paper)",
-                "details": "Bought 1x SPY call spread",
-                "status": "Filled",
-            },
-            {
-                "time": "Apr 25, 1:03 PM",
-                "symbol": "IWM",
-                "action": "Open (Paper)",
-                "details": "Bought 1x IWM call spread",
-                "status": "Filled",
-            },
-        ],
-        "model_health": {
-            "status": "Research only",
-            "signal_win_rate": 0.542,
-            "average_trade_expectancy": 36.12,
-            "sharpe": 1.08,
-            "max_drawdown": -0.124,
-            "trades_analyzed": 2381,
-            "note": "Demo sample data. No live or out-of-sample profitability claim.",
-        },
-    }
+from quant.volatility.estimators import expected_move, iv_percentile, iv_rank
 
 
 def build_math_demo() -> dict[str, Any]:

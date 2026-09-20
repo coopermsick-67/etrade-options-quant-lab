@@ -1,4 +1,4 @@
-"""Database factory kept separate so local mock mode needs no DB driver."""
+"""Database factory kept separate so local no-provider mode needs no DB driver."""
 
 from __future__ import annotations
 

@@ -46,6 +46,9 @@ class PaperBroker:
         self._orders: dict[str, BrokerOrder] = {}
         self._client_ids: dict[str, str] = {}
         self._positions: dict[str, PaperPosition] = {}
+        self._equity_snapshots: list[tuple[datetime, float]] = [
+            (datetime.now(UTC), self.cash)
+        ]
         self._outage = False
         self._emergency_stop = False
 
@@ -188,6 +191,7 @@ class PaperBroker:
         order = BrokerOrder(order_id, request, status, fill_quantity, fill)
         self._orders[order_id] = order
         self._client_ids[request.client_order_id] = order_id
+        self._equity_snapshots.append((datetime.now(UTC), self.equity()))
         return order
 
     def cancel(self, order_id: str) -> BrokerOrder:
@@ -218,9 +222,47 @@ class PaperBroker:
             for p in self._positions.values()
         ]
 
+    def orders(self) -> Sequence[dict[str, object]]:
+        """Return a serializable snapshot of paper orders for the API/UI."""
+
+        return [
+            {
+                "order_id": order.order_id,
+                "client_order_id": order.request.client_order_id,
+                "symbol": order.request.symbol,
+                "action": order.request.action.value,
+                "quantity": order.request.quantity,
+                "filled_quantity": order.filled_quantity,
+                "limit_price": order.request.limit_price,
+                "bid": order.request.bid,
+                "ask": order.request.ask,
+                "multiplier": order.request.multiplier,
+                "status": order.status.value,
+                "reason": order.reason,
+                "submitted_at": order.request.submitted_at.isoformat(),
+                "fill": None
+                if order.fill is None
+                else {
+                    "price": order.fill.price,
+                    "fees": order.fill.fees,
+                    "quantity": order.fill.quantity,
+                    "timestamp": order.fill.timestamp.isoformat(),
+                },
+            }
+            for order in self._orders.values()
+        ]
+
     def equity(self, marks: dict[str, float] | None = None) -> float:
         total = self.cash
         for position in self._positions.values():
             mark = (marks or {}).get(position.symbol, position.average_price)
             total += position.quantity * mark * position.multiplier
         return total
+
+    def equity_history(self) -> Sequence[dict[str, object]]:
+        """Return recorded in-process equity snapshots for the paper UI."""
+
+        return [
+            {"label": timestamp.isoformat(), "value": value}
+            for timestamp, value in self._equity_snapshots
+        ]

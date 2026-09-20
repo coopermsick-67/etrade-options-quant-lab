@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     etrade_access_token: str = ""
     etrade_access_token_secret: str = ""
     etrade_account_id_key: str = ""
-    market_data_provider: str = "mock"
+    # ``none`` is deliberate: the application must never manufacture market data
+    # for the operational UI. Configure ``etrade`` only after the OAuth tokens
+    # and account permissions have been obtained through the documented flow.
+    market_data_provider: str = "none"
     quote_stale_seconds: float = Field(default=120, gt=0)
     paper_initial_equity: float = Field(default=10_000, gt=0)
     paper_slippage_bps: float = Field(default=15, ge=0)
@@ -34,6 +37,11 @@ class Settings(BaseSettings):
     paper_partial_fill_rate: float = Field(default=0, ge=0, le=1)
     paper_fee_per_contract: float = Field(default=0.65, ge=0)
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    risk_per_trade_pct: float = Field(default=0.005, gt=0, le=0.02)
+    max_open_risk_pct: float = Field(default=0.08, gt=0, le=1)
+    daily_loss_limit_pct: float = Field(default=0.03, gt=0, le=1)
+    weekly_loss_limit_pct: float = Field(default=0.05, gt=0, le=1)
+    max_drawdown_pct: float = Field(default=0.10, gt=0, le=1)
 
     @field_validator("trading_mode")
     @classmethod
@@ -47,6 +55,13 @@ class Settings(BaseSettings):
     def validate_etrade_env(cls, value: str) -> str:
         if value not in {"sandbox", "production"}:
             raise ValueError("etrade_env must be sandbox or production")
+        return value
+
+    @field_validator("market_data_provider")
+    @classmethod
+    def validate_market_data_provider(cls, value: str) -> str:
+        if value not in {"none", "etrade"}:
+            raise ValueError("market_data_provider must be none or etrade")
         return value
 
     @field_validator("live_approval_ui_enabled")

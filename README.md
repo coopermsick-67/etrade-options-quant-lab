@@ -11,7 +11,7 @@ It is designed to answer **“Do I actually have a repeatable options-trading ed
 - The quantitative core includes Black-Scholes-Merton, American CRR pricing, Greeks, IV inversion, volatility estimators, Bayesian updating, Monte Carlo, payoff math, risk sizing, portfolio Greeks, and performance metrics.
 - E*TRADE integration is adapter-based and uses the documented OAuth 1.0a lifecycle plus REST account/market/order endpoints. The live adapter is additionally gated by a single-use, short-lived human approval token; the shipped API keeps live approval UI disabled until authenticated review is implemented.
 - Robinhood live options trading is disabled because no official public brokerage-options API was verified in the current official developer documentation. Unofficial endpoints and browser automation are intentionally excluded.
-- The UI launches in DEMO/PAPER mode without broker credentials.
+- The UI launches in PAPER mode without broker credentials, but it does not fabricate quotes, candidates, or performance. Without a configured provider it shows explicit empty states.
 
 This is an implemented research MVP with explicit follow-on boundaries. It does not bundle point-in-time historical option chains, claim a trading edge, or present demo results as live performance.
 
@@ -67,12 +67,21 @@ python -m apps.api.main
 ### Dashboard
 
 ```bash
-cd apps/web
-npm install
-npm run dev
+# terminal 1, from the repository root
+uv run uvicorn apps.api.main:app --reload --host 127.0.0.1 --port 8000
+
+# terminal 2, from the repository root
+npm --prefix apps/web ci
+npm --prefix apps/web run dev -- --host 127.0.0.1
 ```
 
-Open <http://localhost:5173>. The dashboard displays PAPER mode and demo data until a supported provider is configured.
+Open <http://127.0.0.1:5173>. Running `npm run dev` by itself only starts Vite; the proxy errors with `ECONNREFUSED 127.0.0.1:8000` when the FastAPI process is not also running. The dashboard displays PAPER mode with truthful empty states until a supported provider is configured.
+
+For a single Linux/macOS command that starts both processes, use:
+
+```bash
+./scripts/dev.sh
+```
 
 ### Docker
 
@@ -80,8 +89,9 @@ Open <http://localhost:5173>. The dashboard displays PAPER mode and demo data un
 docker compose up --build
 ```
 
-The Compose stack uses safe demo defaults and does not require a `.env` file to
-start. Add a local `.env` only when overriding configuration; never commit it.
+The Compose stack uses safe no-provider defaults and does not require a `.env`
+file to start. Add a local `.env` only when overriding configuration; never
+commit it.
 
 SQLite is supported for local work. PostgreSQL is the recommended deployment database; the current core keeps persistence interfaces small so a PostgreSQL migration can be added without changing quantitative calculations.
 

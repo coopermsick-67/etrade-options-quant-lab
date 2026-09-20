@@ -1,4 +1,8 @@
-"""Deterministic demo data provider. Values are explicitly labelled sample data."""
+"""Test-only deterministic fixture; never used by the operational runtime.
+
+The production API defaults to ``MARKET_DATA_PROVIDER=none`` and only uses an
+authorized provider. This fixture exists solely for deterministic unit tests.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +15,8 @@ from data.normalization.models import ContractType, OptionQuote, QuoteStatus, Un
 
 
 class MockMarketDataProvider:
+    """Synthetic fixture for tests, not a market-data source."""
+
     source = "mock-demo"
 
     def __init__(self, as_of: datetime | None = None) -> None:

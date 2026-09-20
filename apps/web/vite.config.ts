@@ -6,6 +6,9 @@ export default defineConfig({
   server: {
     port: 5173,
     host: "0.0.0.0",
-    proxy: { "/api": "http://localhost:8000", "/health": "http://localhost:8000" },
+    // Use an IPv4 loopback target for Linux development. The frontend still
+    // requires the API process to be running; this avoids localhost/IPv6
+    // resolution differences when the API is bound to 127.0.0.1.
+    proxy: { "/api": "http://127.0.0.1:8000", "/health": "http://127.0.0.1:8000" },
   },
 });

@@ -27,7 +27,7 @@ def validate_underlying_quote(quote: UnderlyingQuote) -> QualityResult:
 
 
 def validate_option_quote(
-    quote: OptionQuote, stale_seconds: float = 120.0, now: datetime | None = None
+    quote: OptionQuote, stale_seconds: float | None = 120.0, now: datetime | None = None
 ) -> QualityResult:
     reasons: list[str] = []
     if not quote.underlying_symbol or not quote.option_symbol:
@@ -70,6 +70,6 @@ def validate_option_quote(
         reasons.append("timestamp must be timezone-aware")
     elif quote.timestamp > datetime.now(UTC):
         reasons.append("quote timestamp is in the future")
-    if quote.age_seconds(now) > stale_seconds:
+    if stale_seconds is not None and quote.age_seconds(now) > stale_seconds:
         reasons.append("stale quote")
     return QualityResult(not reasons, tuple(reasons))

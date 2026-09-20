@@ -84,7 +84,11 @@ class ETradeClient:
         return self._request("GET", f"/accounts/{quote(account_id_key, safe='')}/portfolio")
 
     def get_quote(self, symbols: str, detail_flag: str = "ALL") -> dict[str, Any]:
-        return self._request("GET", f"/market/quote/{symbols}", params={"detailFlag": detail_flag})
+        # The documented route accepts comma-separated symbols. Encode every
+        # other character so user-provided symbols cannot alter the path.
+        return self._request(
+            "GET", f"/market/quote/{quote(symbols, safe=',')}", params={"detailFlag": detail_flag}
+        )
 
     def get_option_chain(
         self, symbol: str, expiry_year: int, expiry_month: int, **params: Any
