@@ -66,6 +66,8 @@ class ETradeClient:
         except requests.RequestException as exc:
             status_code = getattr(getattr(exc, "response", None), "status_code", None)
             raise ETradeAPIError("E*TRADE request failed", status_code) from exc
+        if response.status_code == 204:
+            return {}
         try:
             payload = response.json()
         except ValueError as exc:

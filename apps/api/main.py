@@ -277,8 +277,14 @@ def etrade_accounts() -> dict[str, Any]:
     except ETradeAPIError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     root = payload.get("AccountListResponse", payload)
-    accounts_root = root.get("Accounts", root) if isinstance(root, dict) else {}
-    raw_accounts = accounts_root.get("Account", []) if isinstance(accounts_root, dict) else []
+    accounts_root = (
+        root.get("Accounts", root.get("accounts", root)) if isinstance(root, dict) else {}
+    )
+    raw_accounts = (
+        accounts_root.get("Account", accounts_root.get("account", []))
+        if isinstance(accounts_root, dict)
+        else []
+    )
     if isinstance(raw_accounts, dict):
         raw_accounts = [raw_accounts]
     accounts = []
@@ -287,11 +293,11 @@ def etrade_accounts() -> dict[str, Any]:
             continue
         accounts.append(
             {
-                "account_id": _mask_identifier(account.get("accountId")),
-                "account_mode": account.get("accountMode"),
-                "account_type": account.get("accountType"),
-                "account_status": account.get("accountStatus"),
-                "description": account.get("accountDesc"),
+                "account_id": _mask_identifier(account.get("accountId", account.get("accountID"))),
+                "account_mode": account.get("accountMode", account.get("account_mode")),
+                "account_type": account.get("accountType", account.get("account_type")),
+                "account_status": account.get("accountStatus", account.get("account_status")),
+                "description": account.get("accountDesc", account.get("accountDescription")),
             }
         )
     return {"environment": settings.etrade_env, "accounts": accounts, "source": "etrade"}

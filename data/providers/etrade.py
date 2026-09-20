@@ -213,7 +213,10 @@ class ETradeMarketDataProvider:
             raise ValueError("symbol is required")
         payload = self.client.get_option_expirations(symbol)
         root = _root(payload, "OptionExpireDateResponse")
-        rows = root.get("ExpirationDate", root.get("expirationDates", []))
+        rows = root.get(
+            "ExpirationDate",
+            root.get("expirationDate", root.get("expirationDates", [])),
+        )
         if isinstance(rows, dict):
             rows = [rows]
         if not isinstance(rows, list):

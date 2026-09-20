@@ -87,3 +87,13 @@ def test_etrade_client_quotes_path_symbols_without_allowing_path_injection() -> 
     client.get_quote("SPY/../../accounts")
     called_url = client.session.request.call_args.args[1]
     assert "/market/quote/SPY%2F..%2F..%2Faccounts" in called_url
+
+
+def test_etrade_client_accepts_documented_empty_204_responses() -> None:
+    client = ETradeClient("consumer", "secret", "access", "access-secret")
+    response = Mock()
+    response.status_code = 204
+    response.raise_for_status.return_value = None
+    client.session = Mock()
+    client.session.request.return_value = response
+    assert client.list_accounts() == {}
