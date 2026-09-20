@@ -39,7 +39,7 @@ def test_calibration_metrics_and_bootstrap_are_reproducible() -> None:
 
 def test_covariance_and_tail_risk_helpers() -> None:
     returns = np.array([[0.01, 0.02], [0.00, 0.01], [-0.02, -0.01], [0.03, 0.02]])
-    corr = correlation_matrix(returns)
+    corr = correlation_matrix(returns.tolist())
     assert corr.shape == (2, 2)
     assert corr[0, 0] == pytest.approx(1.0)
     covariance = np.cov(returns, rowvar=False, ddof=1)

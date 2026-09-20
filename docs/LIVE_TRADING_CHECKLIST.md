@@ -8,6 +8,7 @@ Before a production E*TRADE order can be considered:
 - credentials are present only server-side and the environment is explicitly production;
 - quote and risk data are fresh and reconciled;
 - the exact ticket is immutable and hashed;
+- the ticket includes a canonical SHA-256 hash of the exact broker payload;
 - deterministic risk, liquidity, defined-risk, buying-power, and duplicate-order checks pass;
 - E*TRADE preview succeeds;
 - the user gives a fresh explicit confirmation for that exact ticket;

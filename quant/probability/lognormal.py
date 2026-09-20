@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from math import log, sqrt
+from math import exp, isfinite, log, sqrt
 
 from scipy.stats import norm
 
 
-def _validate(spot: float, volatility: float, time: float) -> None:
-    if spot <= 0 or volatility < 0 or time < 0:
+def _validate(spot: float, strike: float, volatility: float, time: float) -> None:
+    if any(not isfinite(value) for value in (spot, strike, volatility, time)):
+        raise ValueError("probability inputs must be finite")
+    if spot <= 0 or strike <= 0 or volatility < 0 or time < 0:
         raise ValueError("spot must be positive, volatility non-negative, and time non-negative")
 
 
@@ -17,13 +19,12 @@ def probability_above(
 ) -> float:
     """P(S_T > strike) under a real-world/model lognormal process."""
 
-    _validate(spot, volatility, time)
-    if strike <= 0:
-        raise ValueError("strike must be positive")
-    if time == 0:
-        return float(spot > strike)
-    if volatility == 0:
-        return float(spot * __import__("math").exp(drift * time) > strike)
+    _validate(spot, strike, volatility, time)
+    if not isfinite(drift):
+        raise ValueError("drift must be finite")
+    if time == 0 or volatility == 0:
+        terminal = spot if time == 0 else spot * exp(drift * time)
+        return float(terminal > strike)
     d2 = (log(spot / strike) + (drift - 0.5 * volatility**2) * time) / (volatility * sqrt(time))
     return float(norm.cdf(d2))
 
@@ -31,7 +32,14 @@ def probability_above(
 def probability_below(
     spot: float, strike: float, time: float, volatility: float, drift: float
 ) -> float:
-    return 1.0 - probability_above(spot, strike, time, volatility, drift)
+    _validate(spot, strike, volatility, time)
+    if not isfinite(drift):
+        raise ValueError("drift must be finite")
+    if time == 0 or volatility == 0:
+        terminal = spot if time == 0 else spot * exp(drift * time)
+        return float(terminal < strike)
+    d2 = (log(spot / strike) + (drift - 0.5 * volatility**2) * time) / (volatility * sqrt(time))
+    return float(norm.cdf(-d2))
 
 
 def probability_between(
@@ -42,8 +50,14 @@ def probability_between(
     volatility: float,
     drift: float,
 ) -> float:
-    if lower >= upper:
+    _validate(spot, lower, volatility, time)
+    if upper <= lower:
         raise ValueError("lower must be less than upper")
+    if not isfinite(drift):
+        raise ValueError("drift must be finite")
+    if time == 0 or volatility == 0:
+        terminal = spot if time == 0 else spot * exp(drift * time)
+        return float(lower < terminal < upper)
     return probability_above(spot, lower, time, volatility, drift) - probability_above(
         spot, upper, time, volatility, drift
     )

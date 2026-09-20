@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
@@ -61,7 +62,7 @@ def test_event_backtest_uses_only_point_in_time_history_and_costs() -> None:
     )
     seen_lengths: list[int] = []
 
-    def signal(history: tuple[HistoricalBar, ...], _index: int) -> bool:
+    def signal(history: Sequence[HistoricalBar], _index: int) -> bool:
         seen_lengths.append(len(history))
         return len(history) == 1
 

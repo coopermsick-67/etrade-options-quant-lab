@@ -32,7 +32,7 @@ class Candidate:
     midpoint: float
     spread_pct: float
     implied_volatility: float
-    realized_volatility: float
+    realized_volatility: float | None
     forecast_volatility: float
     expected_move: float
     delta: float

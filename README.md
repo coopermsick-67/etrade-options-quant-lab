@@ -9,7 +9,7 @@ It is designed to answer **“Do I actually have a repeatable options-trading ed
 - Analysis and PAPER modes are implemented and enabled by default.
 - LIVE mode is disabled by default.
 - The quantitative core includes Black-Scholes-Merton, American CRR pricing, Greeks, IV inversion, volatility estimators, Bayesian updating, Monte Carlo, payoff math, risk sizing, portfolio Greeks, and performance metrics.
-- E*TRADE integration is adapter-based and uses the documented OAuth 1.0a lifecycle plus REST account/market/order endpoints. Live order submission is additionally gated by a single-use, short-lived human approval token.
+- E*TRADE integration is adapter-based and uses the documented OAuth 1.0a lifecycle plus REST account/market/order endpoints. The live adapter is additionally gated by a single-use, short-lived human approval token; the shipped API keeps live approval UI disabled until authenticated review is implemented.
 - Robinhood live options trading is disabled because no official public brokerage-options API was verified in the current official developer documentation. Unofficial endpoints and browser automation are intentionally excluded.
 - The UI launches in DEMO/PAPER mode without broker credentials.
 
@@ -19,6 +19,8 @@ This is an implemented research MVP with explicit follow-on boundaries. It does 
 
 ### Backend
 
+Using `uv` (recommended):
+
 ```bash
 uv venv
 uv pip install -e '.[dev]'
@@ -27,6 +29,21 @@ uv run uvicorn apps.api.main:app --reload --port 8000
 uv run python -m scripts.demo_validation
 ```
 
+Using only Python and `pip`:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[dev]'
+cp .env.example .env
+python -m apps.api.main
+```
+
+The final command is a real server entrypoint; `python -m apps.api.main` is not
+equivalent to merely importing the module. If you use a system Python without
+installing the project dependencies, FastAPI will not be available.
+
 Windows PowerShell:
 
 ```powershell
@@ -34,6 +51,17 @@ uv venv
 uv pip install -e '.[dev]'
 Copy-Item .env.example .env
 uv run uvicorn apps.api.main:app --reload --port 8000
+```
+
+PowerShell without `uv`:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e '.[dev]'
+Copy-Item .env.example .env
+python -m apps.api.main
 ```
 
 ### Dashboard
@@ -52,6 +80,9 @@ Open <http://localhost:5173>. The dashboard displays PAPER mode and demo data un
 docker compose up --build
 ```
 
+The Compose stack uses safe demo defaults and does not require a `.env` file to
+start. Add a local `.env` only when overriding configuration; never commit it.
+
 SQLite is supported for local work. PostgreSQL is the recommended deployment database; the current core keeps persistence interfaces small so a PostgreSQL migration can be added without changing quantitative calculations.
 
 ## Modes
@@ -64,11 +95,11 @@ SQLite is supported for local work. PostgreSQL is the recommended deployment dat
 
 ## Safety boundary
 
-The strategy layer cannot submit orders. Any live order must pass:
+The strategy layer cannot submit orders. Any future live order must pass:
 
 1. deterministic risk and data-freshness checks;
 2. an immutable trade-ticket hash;
-3. a short-lived single-use approval token created by the user interface;
+3. a short-lived single-use approval token created by an authenticated user interface (the current API intentionally returns 403 because that UI is not enabled);
 4. broker preview;
 5. a separate final user confirmation.
 
@@ -92,9 +123,10 @@ Start with:
 ```bash
 uv run pytest
 uv run ruff check .
-uv run mypy quant compliance brokers data backtest paper apps/api
+uv run mypy quant compliance brokers data backtest paper apps/api tests
+uv run python -m compileall -q apps backtest brokers compliance data quant strategies tests
 (cd apps/web && npm run build)
-python scripts/secret_scan.py
+python scripts/secret_scan.py --history
 ```
 
 No broker credentials are needed for CI. Never commit `.env`, OAuth tokens, account identifiers, or private keys.

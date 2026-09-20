@@ -12,7 +12,8 @@ type Candidate = {
   midpoint: number;
   spread_pct: number;
   implied_volatility: number;
-  realized_volatility: number;
+  realized_volatility: number | null;
+  forecast_volatility: number;
   probability_profit: number;
   probability_interval: [number, number];
   max_loss: number;
@@ -58,7 +59,8 @@ type Dashboard = {
   };
 };
 
-const apiBase = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+const configuredApiBase = import.meta.env.VITE_API_URL as string | undefined;
+const apiBase = configuredApiBase?.replace(/\/$/, "") ?? "";
 
 const iconPaths: Record<string, string> = {
   overview: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
@@ -146,14 +148,39 @@ function App() {
   const [showQualifiedOnly, setShowQualifiedOnly] = useState(false);
   const [emergencyStop, setEmergencyStop] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [apiConnected, setApiConnected] = useState(false);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
   const [paperMessage, setPaperMessage] = useState("");
 
   useEffect(() => {
-    fetch(`${apiBase}/api/dashboard`)
+    const controller = new AbortController();
+    let mounted = true;
+    fetch(`${apiBase}/api/dashboard`, { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error("API unavailable"))))
-      .then((payload: Dashboard) => setDashboard(payload))
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
+      .then((payload: Dashboard) => {
+        if (mounted) {
+          setDashboard(payload);
+          setApiConnected(true);
+        }
+      })
+      .catch((error: unknown) => {
+        if (mounted && !(error instanceof DOMException && error.name === "AbortError")) {
+          setApiConnected(false);
+        }
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    fetch(`${apiBase}/api/paper/emergency-stop`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error("API unavailable"))))
+      .then((payload: { enabled: boolean }) => {
+        if (mounted) setEmergencyStop(payload.enabled);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+      controller.abort();
+    };
   }, []);
 
   const strategies = useMemo(() => ["All strategies", ...new Set(dashboard.candidates.map((candidate) => candidate.strategy))], [dashboard.candidates]);
@@ -177,6 +204,24 @@ function App() {
     setPaperMessage(`${candidate.underlying} paper ticket prepared. Review the exact debit and risk before submitting.`);
   }
 
+  async function toggleEmergencyStop() {
+    const enabled = !emergencyStop;
+    setEmergencyStop(enabled);
+    try {
+      const response = await fetch(`${apiBase}/api/paper/emergency-stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) throw new Error("emergency-stop request failed");
+      const payload = (await response.json()) as { enabled: boolean };
+      setEmergencyStop(payload.enabled);
+    } catch {
+      setPaperMessage("Backend emergency-stop state could not be confirmed; treat the stop as active until the API reconnects.");
+      setEmergencyStop(true);
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -191,7 +236,7 @@ function App() {
         </nav>
         <div className="sidebar-spacer" />
         <div className="nav-group-label">SYSTEM</div>
-        <button className="nav-item"><Icon name="settings" /><span>Settings</span></button>
+        <button className="nav-item" onClick={() => setActiveNav("Settings")}><Icon name="settings" /><span>Settings</span></button>
         <div className="health-card"><div className="health-title"><span className="status-dot green" />System health</div><div className="health-row"><span>Data provider</span><strong>Mock / demo</strong></div><div className="health-row"><span>Last quote</span><strong>2.1s ago</strong></div><div className="health-row"><span>Mode</span><strong className="mint">PAPER</strong></div></div>
         <div className="user-row"><div className="avatar">AK</div><div><div className="user-name">Research account</div><div className="user-role">Local workspace</div></div><span className="more">•••</span></div>
       </aside>
@@ -200,9 +245,9 @@ function App() {
         <header className="topbar"><div className="breadcrumb"><span className="muted">Workspace</span><span>/</span><strong>{activeNav}</strong></div><div className="top-actions"><div className="mode-pill"><span className="status-dot mint-dot" />PAPER <span className="caret">⌄</span></div><div className="broker-pill"><span className="status-dot amber" />E*TRADE <span className="muted">disconnected</span></div><div className="broker-pill"><span className="status-dot red" />Robinhood <span className="muted">unavailable</span></div><button className="icon-button" aria-label="Notifications">◌</button><div className="top-avatar">AK</div></div></header>
 
         <div className="content-wrap">
-          <div className="page-head"><div><div className="eyebrow">RESEARCH WORKSTATION <span className="demo-badge">{dashboard.demo ? "DEMO DATA" : "CONNECTED"}</span></div><h1>Good morning, Alex.</h1><p>Measure edge after costs. Preserve capital when the evidence is weak.</p></div><div className="head-actions"><button className="secondary-button" onClick={() => setActiveNav("Backtests")}><Icon name="backtests" size={15} />Run a backtest</button><button className={`stop-button ${emergencyStop ? "engaged" : ""}`} onClick={() => setEmergencyStop((value) => !value)}><span className="stop-icon">■</span>{emergencyStop ? "Stop active" : "Emergency stop"}</button></div></div>
+          <div className="page-head"><div><div className="eyebrow">RESEARCH WORKSTATION <span className="demo-badge">{dashboard.demo ? "DEMO DATA" : "CONNECTED"}</span></div><h1>Good morning, Alex.</h1><p>Measure edge after costs. Preserve capital when the evidence is weak.</p></div><div className="head-actions"><button className="secondary-button" onClick={() => setActiveNav("Backtests")}><Icon name="backtests" size={15} />Run a backtest</button><button className={`stop-button ${emergencyStop ? "engaged" : ""}`} onClick={() => void toggleEmergencyStop()}><span className="stop-icon">■</span>{emergencyStop ? "Stop active" : "Emergency stop"}</button></div></div>
 
-          <div className="notice-bar"><div className="notice-icon">i</div><div><strong>Research mode is active.</strong> Paper results are simulated and not evidence of live profitability. Robinhood live-options execution is unavailable; E*TRADE live actions require a fresh human approval.</div><button aria-label="Dismiss notice">×</button></div>
+          {!noticeDismissed && <div className="notice-bar"><div className="notice-icon">i</div><div><strong>Research mode is active.</strong> Paper results are simulated and not evidence of live profitability. Robinhood live-options execution is unavailable; E*TRADE live actions require a fresh human approval.</div><button aria-label="Dismiss notice" onClick={() => setNoticeDismissed(true)}>×</button></div>}
 
           <section className="metric-grid"><MetricCard label="Account equity" value={formatMoney(dashboard.account.equity, 2)} detail="+$342.56 since start" tone="positive" /><MetricCard label="Today’s P&L" value={`+${formatMoney(dashboard.account.daily_pnl, 2)}`} detail="+1.18% · paper" tone="positive" /><MetricCard label="Buying power" value={formatMoney(dashboard.account.buying_power, 2)} detail="82.1% available" /><MetricCard label="Open risk" value={formatMoney(dashboard.account.open_risk)} detail="12.1% of equity" tone="warning" /><MetricCard label="Portfolio delta" value={dashboard.account.portfolio_delta.toFixed(1)} detail="Near neutral" /><MetricCard label="Portfolio vega" value={`+${dashboard.account.portfolio_vega.toFixed(1)}`} detail="+$3.13 per vol pt" /></section>
 
@@ -212,11 +257,11 @@ function App() {
 
           <section className="bottom-grid"><div className="panel activity-panel"><div className="panel-head"><div><h2>Recent activity</h2><div className="panel-sub">Paper account audit trail</div></div><button className="text-button" onClick={() => setActiveNav("Trade Journal")}>View journal <span>→</span></button></div><div className="activity-list">{dashboard.recent_activity.map((activity) => <div className="activity-item" key={`${activity.time}-${activity.symbol}`}><div className="activity-symbol">{activity.symbol.slice(0, 1)}</div><div className="activity-copy"><strong>{activity.symbol} · {activity.action}</strong><span>{activity.details}</span></div><div className="activity-status"><span className="status-dot green" />{activity.status}<small>{activity.time}</small></div></div>)}</div></div><div className="panel health-panel"><div className="panel-head"><div><h2>Model health</h2><div className="panel-sub">Validation signals · research only</div></div><span className="status-tag research">{dashboard.model_health.status}</span></div><div className="health-metrics"><div><span>Signal win rate</span><strong>{formatPct(dashboard.model_health.signal_win_rate)}</strong></div><div><span>Avg. expectancy</span><strong>{formatMoney(dashboard.model_health.average_trade_expectancy)}</strong></div><div><span>Sharpe</span><strong>{dashboard.model_health.sharpe.toFixed(2)}</strong></div><div><span>Max drawdown</span><strong className="negative-text">{formatPct(dashboard.model_health.max_drawdown)}</strong></div></div><div className="health-note"><span className="status-dot amber" />{dashboard.model_health.note}</div></div></section>
 
-          <footer className="footer-note"><span>Quant Lab v0.1.0</span><span>Last refresh {loading ? "loading…" : "just now"}</span><span>All calculations deterministic · source timestamps required</span><span className="footer-right"><span className="status-dot green" />API connected to demo provider</span></footer>
+          <footer className="footer-note"><span>Quant Lab v0.1.0</span><span>Last refresh {loading ? "loading…" : "just now"}</span><span>All calculations deterministic · source timestamps required</span><span className="footer-right"><span className={`status-dot ${apiConnected ? "green" : "red"}`} />{apiConnected ? "API connected" : "API unavailable · demo fallback"}</span></footer>
         </div>
       </main>
 
-      {selected && <div className="drawer-backdrop" onClick={() => setSelected(null)}><aside className="candidate-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-head"><div><div className="eyebrow">CANDIDATE DETAIL</div><h2>{selected.underlying} <span className="drawer-muted">/ {selected.strategy}</span></h2></div><button className="close-button" onClick={() => setSelected(null)}>×</button></div><div className="drawer-status"><span className={`status-tag ${selected.net_ev >= 0 ? "watch" : "pass"}`}>{selected.net_ev >= 0 ? "Review" : "Pass"}</span><span>Research candidate · no live order</span></div><div className="drawer-grid"><div><span>Executable debit</span><strong>{formatMoney(selected.ask, 2)}</strong></div><div><span>Probability of profit</span><strong>{formatPct(selected.probability_profit)}</strong></div><div><span>Net EV</span><strong className={selected.net_ev >= 0 ? "positive-text" : "negative-text"}>{formatMoney(selected.net_ev, 2)}</strong></div><div><span>Risk / reward</span><strong>{formatMoney(selected.max_loss)} / {formatMoney(selected.max_profit)}</strong></div></div><div className="drawer-section"><h3>Legs</h3>{selected.legs.map((leg) => <div className="leg-row" key={`${leg.action}-${leg.strike}`}><span className={leg.action === "BUY_OPEN" ? "leg-buy" : "leg-sell"}>{leg.action === "BUY_OPEN" ? "BUY" : "SELL"}</span><strong>{leg.option_type} {leg.strike}</strong><span>{formatMoney(leg.price, 2)}</span></div>)}</div><div className="drawer-section"><h3>Model inputs</h3><div className="input-grid"><div><span>IV</span><strong>{formatPct(selected.implied_volatility)}</strong></div><div><span>Forecast RV</span><strong>{formatPct(selected.realized_volatility)}</strong></div><div><span>Delta</span><strong>{selected.delta.toFixed(3)}</strong></div><div><span>Gamma</span><strong>{selected.gamma.toFixed(4)}</strong></div><div><span>Theta</span><strong>{selected.theta.toFixed(2)}</strong></div><div><span>Vega</span><strong>{selected.vega.toFixed(2)}</strong></div></div></div><div className="drawer-section"><h3>Why this could fail</h3><ul>{selected.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul><p className="drawer-warning">A model estimate is not certainty. Review quote age, event risk, slippage, and portfolio impact before any paper action.</p></div><div className="drawer-actions"><button className="secondary-button" onClick={() => setPaperMessage("Backtest queued with conservative, realistic, and optimistic fills.")}>Run scenario</button><button className="primary-button" onClick={() => runPaperAction(selected)} disabled={emergencyStop}>Prepare paper ticket</button></div>{paperMessage && <div className="drawer-message">{paperMessage}</div>}</aside></div>}
+      {selected && <div className="drawer-backdrop" onClick={() => setSelected(null)}><aside className="candidate-drawer" onClick={(event) => event.stopPropagation()}><div className="drawer-head"><div><div className="eyebrow">CANDIDATE DETAIL</div><h2>{selected.underlying} <span className="drawer-muted">/ {selected.strategy}</span></h2></div><button className="close-button" onClick={() => setSelected(null)}>×</button></div><div className="drawer-status"><span className={`status-tag ${selected.net_ev >= 0 ? "watch" : "pass"}`}>{selected.net_ev >= 0 ? "Review" : "Pass"}</span><span>Research candidate · no live order</span></div><div className="drawer-grid"><div><span>Executable debit</span><strong>{formatMoney(selected.ask, 2)}</strong></div><div><span>Probability of profit</span><strong>{formatPct(selected.probability_profit)}</strong></div><div><span>Net EV</span><strong className={selected.net_ev >= 0 ? "positive-text" : "negative-text"}>{formatMoney(selected.net_ev, 2)}</strong></div><div><span>Risk / reward</span><strong>{formatMoney(selected.max_loss)} / {formatMoney(selected.max_profit)}</strong></div></div><div className="drawer-section"><h3>Legs</h3>{selected.legs.map((leg) => <div className="leg-row" key={`${leg.action}-${leg.strike}`}><span className={leg.action === "BUY_OPEN" ? "leg-buy" : "leg-sell"}>{leg.action === "BUY_OPEN" ? "BUY" : "SELL"}</span><strong>{leg.option_type} {leg.strike}</strong><span>{formatMoney(leg.price, 2)}</span></div>)}</div><div className="drawer-section"><h3>Model inputs</h3><div className="input-grid"><div><span>IV</span><strong>{formatPct(selected.implied_volatility)}</strong></div><div><span>Realized vol</span><strong>{selected.realized_volatility == null ? "N/A" : formatPct(selected.realized_volatility)}</strong></div><div><span>Forecast vol</span><strong>{formatPct(selected.forecast_volatility ?? selected.implied_volatility)}</strong></div><div><span>Delta</span><strong>{selected.delta.toFixed(3)}</strong></div><div><span>Gamma</span><strong>{selected.gamma.toFixed(4)}</strong></div><div><span>Theta</span><strong>{selected.theta.toFixed(2)}</strong></div><div><span>Vega</span><strong>{selected.vega.toFixed(2)}</strong></div></div></div><div className="drawer-section"><h3>Why this could fail</h3><ul>{selected.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul><p className="drawer-warning">A model estimate is not certainty. Review quote age, event risk, slippage, and portfolio impact before any paper action.</p></div><div className="drawer-actions"><button className="secondary-button" onClick={() => setPaperMessage("Backtest queued with conservative, realistic, and optimistic fills.")}>Run scenario</button><button className="primary-button" onClick={() => runPaperAction(selected)} disabled={emergencyStop}>Prepare paper ticket</button></div>{paperMessage && <div className="drawer-message">{paperMessage}</div>}</aside></div>}
     </div>
   );
 }

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from math import exp, log, sqrt
+from math import exp, isfinite, log, sqrt
 
 from scipy.optimize import brentq
 from scipy.stats import norm
@@ -44,6 +44,8 @@ class IVResult:
 
 
 def _validate(spot: float, strike: float, time: float, volatility: float) -> None:
+    if any(not isfinite(value) for value in (spot, strike, time, volatility)):
+        raise PricingError("spot, strike, time, and volatility must be finite")
     if spot <= 0 or strike <= 0:
         raise PricingError("spot and strike must be positive")
     if time < 0:
@@ -60,6 +62,8 @@ def _d1_d2(
     volatility: float,
     dividend_yield: float,
 ) -> tuple[float, float]:
+    if not isfinite(rate) or not isfinite(dividend_yield):
+        raise PricingError("rate and dividend yield must be finite")
     if time <= 0 or volatility <= 0:
         raise PricingError("d1/d2 are undefined for zero time or volatility")
     sigma_sqrt_t = volatility * sqrt(time)
@@ -80,6 +84,8 @@ def bs_price(
 
     option_type = OptionType(option_type)
     _validate(spot, strike, time, volatility)
+    if not isfinite(rate) or not isfinite(dividend_yield):
+        raise PricingError("rate and dividend yield must be finite")
     if time == 0:
         return (
             max(spot - strike, 0.0) if option_type is OptionType.CALL else max(strike - spot, 0.0)
@@ -113,6 +119,8 @@ def bs_greeks(
 
     option_type = OptionType(option_type)
     _validate(spot, strike, time, volatility)
+    if not isfinite(rate) or not isfinite(dividend_yield):
+        raise PricingError("rate and dividend yield must be finite")
     if time <= 0 or volatility <= 0:
         raise PricingError("analytical Greeks require positive time and volatility")
     d1, d2 = _d1_d2(spot, strike, time, rate, volatility, dividend_yield)
@@ -151,6 +159,8 @@ def no_arbitrage_bounds(
     """Return European no-arbitrage lower/upper bounds per share."""
 
     option_type = OptionType(option_type)
+    if any(not isfinite(value) for value in (spot, strike, time, rate, dividend_yield)):
+        raise PricingError("bounds inputs must be finite")
     if spot <= 0 or strike <= 0 or time < 0:
         raise PricingError("invalid inputs for no-arbitrage bounds")
     spot_pv = spot * exp(-dividend_yield * time)
@@ -174,12 +184,16 @@ def implied_volatility(
 
     option_type = OptionType(option_type)
     _validate(spot, strike, time, 0.0)
+    if not isfinite(market_price) or not isfinite(rate) or not isfinite(dividend_yield):
+        raise PricingError("market price, rate, and dividend yield must be finite")
     if market_price < 0:
         raise PricingError("market price cannot be negative")
+    if not isfinite(max_volatility) or max_volatility <= 0:
+        raise PricingError("maximum volatility must be positive and finite")
     if time <= 0:
         intrinsic = bs_price(spot, strike, 0.0, rate, 0.0, option_type, dividend_yield)
         if abs(market_price - intrinsic) <= 1e-8:
-            return IVResult(0.0, True, 0, 0.0, "expiry-intrinsic")
+            return IVResult(None, False, 0, abs(market_price - intrinsic), "expiry-intrinsic")
         raise PricingError("IV is undefined at expiry unless price equals intrinsic value")
     lower, upper = no_arbitrage_bounds(spot, strike, time, rate, option_type, dividend_yield)
     tolerance = 1e-8 + 1e-6 * max(1.0, upper)
@@ -188,7 +202,13 @@ def implied_volatility(
             f"market price {market_price} violates no-arbitrage bounds [{lower}, {upper}]"
         )
     if abs(market_price - lower) <= tolerance:
-        return IVResult(0.0, True, 0, abs(market_price - lower), "lower-bound")
+        return IVResult(
+            None,
+            False,
+            0,
+            abs(market_price - lower),
+            "lower-bound-non-identifiable",
+        )
 
     def objective(volatility: float) -> float:
         return (

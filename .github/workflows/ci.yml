@@ -15,11 +15,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv sync --extra dev
+      - run: uv sync --locked --extra dev
       - run: uv run ruff check .
-      - run: uv run mypy quant compliance brokers data backtest apps/api
+      - run: uv run mypy quant compliance brokers data backtest apps/api tests
       - run: uv run pytest --cov=quant --cov=brokers --cov=compliance --cov=backtest --cov=apps/api
-      - run: uv run python scripts/secret_scan.py
+      - run: uv run python -m compileall -q apps backtest brokers compliance data quant strategies tests
+      - run: uv run python scripts/secret_scan.py --history
+      - run: uv run python scripts/demo_validation.py
 
   frontend:
     runs-on: ubuntu-latest

@@ -2,21 +2,33 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from brokers.base import BrokerOrder
-from brokers.etrade.client import ETradeClient
-from compliance.etrade_live_guard import ApprovalTokenService, ComplianceError, TradeTicket
+from compliance.etrade_live_guard import (
+    ApprovalTokenService,
+    ComplianceError,
+    TradeTicket,
+    canonical_payload_hash,
+)
 
 
 class BrokerCapabilityError(RuntimeError):
     """Raised when a requested broker capability is not officially available."""
 
 
+class ETradeOrderClient(Protocol):
+    environment: str
+
+    def preview_order(self, account_id_key: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+    def place_order(self, account_id_key: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+
 class ETradeLiveBroker:
     def __init__(
         self,
-        client: ETradeClient,
+        client: ETradeOrderClient,
         account_id_key: str,
         approval_service: ApprovalTokenService,
         live_trading_enabled: bool = False,
@@ -38,6 +50,12 @@ class ETradeLiveBroker:
             raise ComplianceError("live trading is disabled")
         if self.client.environment != "production":
             raise ComplianceError("live order submission requires production environment")
+        if not self.account_id_key.strip():
+            raise ComplianceError("a selected E*TRADE account is required")
+        if ticket.payload_hash is None:
+            raise ComplianceError("approval ticket is not bound to an exact broker payload")
+        if ticket.payload_hash != canonical_payload_hash(payload):
+            raise ComplianceError("broker payload does not match the approved trade ticket")
         self.approval_service.consume(ticket, approval_token)
         return self.client.place_order(self.account_id_key, payload)
 

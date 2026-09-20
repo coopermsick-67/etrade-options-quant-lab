@@ -5,7 +5,12 @@ import pytest
 from brokers.base import OrderAction, OrderRequest, OrderStatus
 from brokers.etrade.broker import BrokerCapabilityError, ETradeLiveBroker, RobinhoodOptionsBroker
 from brokers.paper.broker import PaperBroker
-from compliance.etrade_live_guard import ApprovalTokenService, ComplianceError, TradeTicket
+from compliance.etrade_live_guard import (
+    ApprovalTokenService,
+    ComplianceError,
+    TradeTicket,
+    canonical_payload_hash,
+)
 from quant.risk.engine import RiskLimits, fixed_risk_contracts, pretrade_check
 
 
@@ -124,10 +129,16 @@ def test_live_broker_requires_approval_and_robinhood_is_disabled() -> None:
     service = ApprovalTokenService("z" * 40)
     client = FakeClient()
     broker = ETradeLiveBroker(client, "masked", service, live_trading_enabled=True)
+    payload = {"order": "exact"}
     with pytest.raises(ComplianceError):
-        broker.submit(ticket(), {}, "not-a-token")
-    token = service.issue_from_ui(ticket())
-    assert broker.submit(ticket(), {}, token) == {"status": "accepted"}
+        broker.submit(ticket(), payload, "not-a-token")
+    approved_ticket = replace(ticket(), payload_hash=canonical_payload_hash(payload))
+    token = service.issue_from_ui(approved_ticket)
+    assert broker.submit(approved_ticket, payload, token) == {"status": "accepted"}
     assert client.placed == 1
+    altered_payload = {"order": "tampered"}
+    token_two = service.issue_from_ui(approved_ticket)
+    with pytest.raises(ComplianceError, match="payload"):
+        broker.submit(approved_ticket, altered_payload, token_two)
     with pytest.raises(BrokerCapabilityError):
         RobinhoodOptionsBroker().submit()

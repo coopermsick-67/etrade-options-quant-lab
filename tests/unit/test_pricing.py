@@ -56,6 +56,9 @@ def test_implied_volatility_inversion_is_diagnostic() -> None:
     assert result.pricing_error is not None and result.pricing_error < 1e-8
     with pytest.raises(PricingError):
         implied_volatility(1000, 100, 105, 30 / 365, 0.04, OptionType.CALL)
+    lower_bound = implied_volatility(0.0, 100, 500, 30 / 365, 0.04, OptionType.CALL)
+    assert lower_bound.converged is False
+    assert lower_bound.implied_volatility is None
 
 
 def test_american_put_is_at_least_european_put() -> None:

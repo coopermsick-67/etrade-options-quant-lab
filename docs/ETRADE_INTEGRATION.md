@@ -29,16 +29,22 @@ Live submission is disabled unless all of the following hold:
 4. market data is fresh and account reconciliation is healthy;
 5. deterministic risk checks pass;
 6. the exact ticket has been previewed;
-7. the UI created a short-lived, single-use approval token for the immutable ticket hash;
+7. an authenticated UI created a short-lived, single-use approval token for the immutable ticket hash, including the canonical hash of the exact broker payload;
 8. the user performs a separate final confirmation.
 
-No strategy, scheduler, LLM, or background task can create an approval token. There is no unattended live-order path.
+The shipped FastAPI approval route is intentionally disabled (`LIVE_APPROVAL_UI_ENABLED=false` and no local authentication layer exists). The adapter and guard are therefore mock/integration-testable, but production live execution is not enabled by this repository. No strategy, scheduler, LLM, or background task can create an approval token. There is no unattended live-order path.
 
 ## Authentication requirements
 
 The documented workflow uses a consumer key and secret, a temporary request token, user authorization and verifier, then an access token and secret. Requests use OAuth 1.0a with HMAC-SHA1. Tokens may become inactive after two hours of API inactivity and are documented to expire at midnight U.S. Eastern Time by default; the app treats renewal and reauthorization as explicit states rather than guessing.
 
 Separate sandbox and production keys are required. Secrets are server-side environment variables only. The app never asks for an E*TRADE username or password.
+
+The current getting-started page also distinguishes individual and vendor keys,
+requires the API agreement for production access, and notes that market-data
+access requires the applicable market-data agreement. Those account and
+entitlement checks remain operator responsibilities; this repository does not
+pretend that sandbox credentials prove production access.
 
 ## Environment and endpoints
 
@@ -69,4 +75,3 @@ The app does not hardcode a rate limit. The reviewed public pages do not state a
 - [Order API](https://apisb.etrade.com/docs/api/order/api-order-v1.html)
 - [API Developer License Agreement](https://us.etrade.com/l/f/agreement-library/api-developer-licensing-agreement)
 - [Developer terms of use](https://developer.etrade.com/support/terms-of-use)
-

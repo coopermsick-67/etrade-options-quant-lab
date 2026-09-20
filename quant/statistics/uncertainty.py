@@ -16,7 +16,7 @@ def bootstrap_interval(
     block_size: int = 1,
 ) -> tuple[float, float]:
     observations = np.asarray(values, dtype=float)
-    if observations.ndim != 1 or len(observations) < 2:
+    if observations.ndim != 1 or len(observations) < 2 or not np.all(np.isfinite(observations)):
         raise ValueError("at least two observations are required")
     if not 0 < confidence < 1 or iterations < 1 or block_size < 1:
         raise ValueError("invalid bootstrap settings")

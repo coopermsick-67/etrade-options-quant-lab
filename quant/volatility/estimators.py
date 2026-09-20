@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from math import sqrt
+from math import isfinite, sqrt
 
 import numpy as np
 
 
 def log_returns(prices: Sequence[float]) -> np.ndarray:
     values = np.asarray(prices, dtype=float)
-    if values.ndim != 1 or len(values) < 2 or np.any(values <= 0):
+    if values.ndim != 1 or len(values) < 2 or not np.all(np.isfinite(values)) or np.any(values <= 0):
         raise ValueError(
             "prices must be a one-dimensional sequence of at least two positive values"
         )
@@ -19,7 +19,7 @@ def log_returns(prices: Sequence[float]) -> np.ndarray:
 
 def arithmetic_returns(prices: Sequence[float]) -> np.ndarray:
     values = np.asarray(prices, dtype=float)
-    if values.ndim != 1 or len(values) < 2 or np.any(values <= 0):
+    if values.ndim != 1 or len(values) < 2 or not np.all(np.isfinite(values)) or np.any(values <= 0):
         raise ValueError(
             "prices must be a one-dimensional sequence of at least two positive values"
         )
@@ -28,7 +28,13 @@ def arithmetic_returns(prices: Sequence[float]) -> np.ndarray:
 
 def annualized_volatility(returns: Sequence[float], periods_per_year: float = 252.0) -> float:
     values = np.asarray(returns, dtype=float)
-    if values.ndim != 1 or len(values) < 2 or periods_per_year <= 0:
+    if (
+        values.ndim != 1
+        or len(values) < 2
+        or not np.all(np.isfinite(values))
+        or not isfinite(periods_per_year)
+        or periods_per_year <= 0
+    ):
         raise ValueError("at least two returns and a positive annualization factor are required")
     return float(np.std(values, ddof=1) * sqrt(periods_per_year))
 
@@ -55,7 +61,13 @@ def ewma_volatility(
     returns: Sequence[float], decay: float = 0.94, periods_per_year: float = 252.0
 ) -> float:
     values = np.asarray(returns, dtype=float)
-    if len(values) < 2 or not 0 < decay < 1:
+    if (
+        len(values) < 2
+        or not np.all(np.isfinite(values))
+        or not isfinite(periods_per_year)
+        or periods_per_year <= 0
+        or not 0 < decay < 1
+    ):
         raise ValueError("EWMA needs at least two returns and decay in (0, 1)")
     variance = float(values[0] ** 2)
     for value in values[1:]:
@@ -71,8 +83,12 @@ def parkinson_volatility(
     if (
         len(high_values) != len(low_values)
         or len(high_values) < 2
+        or not np.all(np.isfinite(high_values))
+        or not np.all(np.isfinite(low_values))
         or np.any(low_values <= 0)
         or np.any(high_values < low_values)
+        or not isfinite(periods_per_year)
+        or periods_per_year <= 0
     ):
         raise ValueError("high/low series are invalid")
     variance = np.mean(np.log(high_values / low_values) ** 2) / (4 * np.log(2))
@@ -93,10 +109,17 @@ def garman_klass_volatility(
     if (
         not all(len(x) == len(open_values) for x in (high_values, low_values, close_values))
         or len(open_values) < 2
+        or not all(np.all(np.isfinite(x)) for x in (open_values, high_values, low_values, close_values))
+        or not isfinite(periods_per_year)
+        or periods_per_year <= 0
     ):
         raise ValueError("OHLC series must have equal length and at least two rows")
     if np.any(np.asarray([*open_values, *high_values, *low_values, *close_values]) <= 0):
         raise ValueError("OHLC values must be positive")
+    if np.any(high_values < np.maximum(open_values, close_values)) or np.any(
+        low_values > np.minimum(open_values, close_values)
+    ):
+        raise ValueError("OHLC high/low bounds are inconsistent")
     term = (
         0.5 * np.log(high_values / low_values) ** 2
         - (2 * np.log(2) - 1) * np.log(close_values / open_values) ** 2
@@ -107,6 +130,8 @@ def garman_klass_volatility(
 def expected_move(
     spot: float, implied_volatility: float, dte: float, days_per_year: float = 365.0
 ) -> float:
+    if any(not isfinite(value) for value in (spot, implied_volatility, dte, days_per_year)):
+        raise ValueError("invalid expected-move inputs")
     if spot <= 0 or implied_volatility < 0 or dte < 0 or days_per_year <= 0:
         raise ValueError("invalid expected-move inputs")
     return float(spot * implied_volatility * sqrt(dte / days_per_year))
@@ -114,7 +139,13 @@ def expected_move(
 
 def iv_rank(current_iv: float, historical_ivs: Sequence[float]) -> float:
     values = np.asarray(historical_ivs, dtype=float)
-    if len(values) == 0 or current_iv < 0 or np.any(values < 0):
+    if (
+        len(values) == 0
+        or not isfinite(current_iv)
+        or not np.all(np.isfinite(values))
+        or current_iv < 0
+        or np.any(values < 0)
+    ):
         raise ValueError("IV history must be non-empty and non-negative")
     minimum, maximum = float(np.min(values)), float(np.max(values))
     if maximum == minimum:
@@ -124,6 +155,12 @@ def iv_rank(current_iv: float, historical_ivs: Sequence[float]) -> float:
 
 def iv_percentile(current_iv: float, historical_ivs: Sequence[float]) -> float:
     values = np.asarray(historical_ivs, dtype=float)
-    if len(values) == 0 or current_iv < 0 or np.any(values < 0):
+    if (
+        len(values) == 0
+        or not isfinite(current_iv)
+        or not np.all(np.isfinite(values))
+        or current_iv < 0
+        or np.any(values < 0)
+    ):
         raise ValueError("IV history must be non-empty and non-negative")
     return float(np.mean(values < current_iv) * 100.0)

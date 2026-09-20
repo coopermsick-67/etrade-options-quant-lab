@@ -14,6 +14,8 @@ def _validate(
     y = np.asarray(outcomes, dtype=float)
     if p.ndim != 1 or y.ndim != 1 or len(p) != len(y) or len(p) == 0:
         raise ValueError("probabilities and outcomes must be equally sized non-empty vectors")
+    if not np.all(np.isfinite(p)) or not np.all(np.isfinite(y)):
+        raise ValueError("probabilities and outcomes must be finite")
     if np.any((p <= 0) | (p >= 1)) or np.any(~np.isin(y, (0, 1))):
         raise ValueError("probabilities must be in (0,1) and outcomes must be binary")
     return p, y

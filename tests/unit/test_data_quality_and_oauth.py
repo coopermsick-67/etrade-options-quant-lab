@@ -2,7 +2,9 @@ from datetime import UTC, date, datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
+import requests
 
+from brokers.etrade.client import ETradeAPIError, ETradeClient
 from brokers.etrade.oauth import ETradeOAuthClient, OAuthTokens
 from data.normalization.models import ContractType, OptionQuote
 from data.validation.quality import validate_option_quote
@@ -56,3 +58,17 @@ def test_etrade_oauth_parser_does_not_hide_malformed_responses() -> None:
     response.raise_for_status.return_value = None
     with pytest.raises(RuntimeError):
         client._parse_token_response(response)
+
+
+def test_etrade_client_wraps_transport_errors_and_quotes_path_identifiers() -> None:
+    client = ETradeClient("consumer", "secret", "access", "access-secret")
+    response = Mock()
+    response.status_code = 401
+    response.raise_for_status.side_effect = requests.HTTPError(response=response)
+    client.session = Mock()
+    client.session.request.return_value = response
+    with pytest.raises(ETradeAPIError) as error:
+        client.get_balances("account/key")
+    assert error.value.status_code == 401
+    called_url = client.session.request.call_args.args[1]
+    assert "/accounts/account%2Fkey/margin" in called_url

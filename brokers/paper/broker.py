@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import isfinite
 
 from brokers.base import BrokerOrder, Fill, OrderAction, OrderRequest, OrderStatus
 
@@ -26,7 +27,15 @@ class PaperBroker:
         fee_per_contract: float = 0.65,
         allow_uncovered_short: bool = False,
     ) -> None:
-        if initial_equity <= 0 or slippage_bps < 0 or not 0 <= partial_fill_rate <= 1:
+        if (
+            not isfinite(initial_equity)
+            or initial_equity <= 0
+            or not isfinite(slippage_bps)
+            or slippage_bps < 0
+            or not 0 <= partial_fill_rate <= 1
+            or not isfinite(fee_per_contract)
+            or fee_per_contract < 0
+        ):
             raise ValueError("invalid paper broker configuration")
         self.cash = float(initial_equity)
         self.initial_equity = float(initial_equity)
@@ -38,11 +47,22 @@ class PaperBroker:
         self._client_ids: dict[str, str] = {}
         self._positions: dict[str, PaperPosition] = {}
         self._outage = False
+        self._emergency_stop = False
 
     def set_outage(self, enabled: bool) -> None:
         self._outage = enabled
 
+    @property
+    def emergency_stop(self) -> bool:
+        return self._emergency_stop
+
+    def set_emergency_stop(self, enabled: bool) -> None:
+        self._emergency_stop = enabled
+
     def submit(self, request: OrderRequest) -> BrokerOrder:
+        existing_id = self._client_ids.get(request.client_order_id)
+        if existing_id:
+            return self._orders[existing_id]
         if self._outage:
             order = BrokerOrder(
                 str(len(self._orders) + 1),
@@ -51,15 +71,25 @@ class PaperBroker:
                 reason="paper broker outage",
             )
             self._orders[order.order_id] = order
+            self._client_ids[request.client_order_id] = order.order_id
             return order
-        existing_id = self._client_ids.get(request.client_order_id)
-        if existing_id:
-            return self._orders[existing_id]
+        if self._emergency_stop:
+            order = BrokerOrder(
+                str(len(self._orders) + 1),
+                request,
+                OrderStatus.REJECTED,
+                reason="paper emergency stop is active",
+            )
+            self._orders[order.order_id] = order
+            self._client_ids[request.client_order_id] = order.order_id
+            return order
         if (
             request.quantity < 1
             or request.limit_price <= 0
             or request.bid < 0
+            or request.ask < 0
             or request.ask < request.bid
+            or request.multiplier <= 0
         ):
             order = BrokerOrder(
                 str(len(self._orders) + 1), request, OrderStatus.REJECTED, reason="invalid order"
@@ -161,6 +191,8 @@ class PaperBroker:
         return order
 
     def cancel(self, order_id: str) -> BrokerOrder:
+        if order_id not in self._orders:
+            raise KeyError(f"unknown paper order {order_id}")
         order = self._orders[order_id]
         if order.status in {OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED, OrderStatus.REJECTED}:
             return order

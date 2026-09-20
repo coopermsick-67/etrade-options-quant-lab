@@ -8,13 +8,20 @@ import hashlib
 import hmac
 import json
 import secrets
+import threading
 import time
 from dataclasses import asdict, dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
 class ComplianceError(PermissionError):
     """Raised when a live action lacks valid human approval."""
+
+
+def canonical_payload_hash(payload: dict[str, Any]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -29,6 +36,47 @@ class TradeTicket:
     quote_timestamp: str
     risk_dollars: str
     model_version: str
+    payload_hash: str | None = None
+
+    def __post_init__(self) -> None:
+        if any(
+            not isinstance(value, str)
+            for value in (
+                self.account_id,
+                self.symbol,
+                self.action,
+                self.limit_price,
+                self.order_type,
+                self.quote_timestamp,
+                self.risk_dollars,
+                self.model_version,
+            )
+        ):
+            raise ValueError("ticket string fields have invalid types")
+        if not self.account_id.strip() or not self.symbol.strip():
+            raise ValueError("account and symbol are required")
+        if isinstance(self.quantity, bool) or not isinstance(self.quantity, int) or self.quantity < 1:
+            raise ValueError("ticket quantity must be positive")
+        if not self.order_type.strip() or not self.action.strip():
+            raise ValueError("ticket action and order type are required")
+        if not isinstance(self.legs, (tuple, list)) or not self.legs or any(
+            not isinstance(leg, dict) for leg in self.legs
+        ):
+            raise ValueError("ticket must contain at least one leg")
+        if self.payload_hash is not None:
+            if len(self.payload_hash) != 64 or any(
+                character not in "0123456789abcdef" for character in self.payload_hash
+            ):
+                raise ValueError("ticket payload hash must be a lowercase SHA-256 hex digest")
+        try:
+            limit_price = Decimal(self.limit_price)
+            risk_dollars = Decimal(self.risk_dollars)
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValueError("ticket prices and risk must be decimal strings") from exc
+        if not limit_price.is_finite() or limit_price <= 0:
+            raise ValueError("ticket limit price must be positive and finite")
+        if not risk_dollars.is_finite() or risk_dollars < 0:
+            raise ValueError("ticket risk must be non-negative and finite")
 
     def canonical_payload(self) -> str:
         return json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), default=str)
@@ -53,6 +101,7 @@ class ApprovalTokenService:
         self._secret = secret.encode("utf-8")
         self.ttl_seconds = ttl_seconds
         self._used: set[str] = set()
+        self._lock = threading.Lock()
 
     def issue_from_ui(self, ticket: TradeTicket, actor: str = "user") -> str:
         if actor != "user":
@@ -81,16 +130,24 @@ class ApprovalTokenService:
                 raise ComplianceError("invalid approval signature")
             padding = "=" * (-len(encoded) % 4)
             payload = json.loads(base64.urlsafe_b64decode(encoded + padding))
-        except (ValueError, json.JSONDecodeError, binascii.Error) as exc:
+        except (ValueError, TypeError, json.JSONDecodeError, binascii.Error) as exc:
             raise ComplianceError("malformed approval token") from exc
-        nonce = str(payload.get("nonce", ""))
-        if not nonce or nonce in self._used:
+        if not isinstance(payload, dict):
+            raise ComplianceError("malformed approval payload")
+        nonce = payload.get("nonce")
+        if not isinstance(nonce, str) or not nonce:
             raise ComplianceError("approval token is missing or already used")
         if payload.get("actor") != "user":
             raise ComplianceError("approval actor is not user")
-        if int(payload.get("expires_at", 0)) < int(time.time()):
+        expires_at = payload.get("expires_at")
+        if not isinstance(expires_at, int):
+            raise ComplianceError("approval expiry is invalid")
+        if expires_at <= int(time.time()):
             raise ComplianceError("approval token expired")
         if payload.get("ticket_hash") != ticket.sha256():
             raise ComplianceError("approval does not match immutable trade ticket")
-        self._used.add(nonce)
+        with self._lock:
+            if nonce in self._used:
+                raise ComplianceError("approval token is missing or already used")
+            self._used.add(nonce)
         return payload

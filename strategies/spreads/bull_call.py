@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import isfinite
 from uuid import uuid4
 
 from data.normalization.models import ContractType, OptionQuote
@@ -17,6 +18,7 @@ def build_bull_call_spread(
     short_call: OptionQuote,
     risk_free_rate: float = 0.04,
     forecast_volatility: float | None = None,
+    realized_volatility: float | None = None,
     model_drift: float = 0.0,
     transaction_costs: float = 1.30,
 ) -> Candidate:
@@ -32,16 +34,27 @@ def build_bull_call_spread(
         or long_call.underlying_symbol != short_call.underlying_symbol
     ):
         raise ValueError("legs must share underlying and expiration")
+    if long_call.multiplier != short_call.multiplier:
+        raise ValueError("legs must share contract multiplier")
     spot = long_call.underlying_price or 0.0
     if spot <= 0:
         raise ValueError("underlying price is required")
     dte = long_call.dte()
-    time = max(dte, 1) / 365.0
-    iv_long = long_call.implied_volatility or 0.25
-    iv_short = short_call.implied_volatility or iv_long
+    if dte <= 0:
+        raise ValueError("spread must have positive time to expiration")
+    time = dte / 365.0
+    iv_long = long_call.implied_volatility if long_call.implied_volatility is not None else 0.25
+    iv_short = short_call.implied_volatility if short_call.implied_volatility is not None else iv_long
+    if any(not isfinite(value) or value <= 0 for value in (iv_long, iv_short)):
+        raise ValueError("leg implied volatilities must be positive and finite")
+    if not isfinite(risk_free_rate) or not isfinite(model_drift) or transaction_costs < 0:
+        raise ValueError("rate, drift, and transaction costs are invalid")
     debit = long_call.ask - short_call.bid
     if debit <= 0:
         raise ValueError("spread debit must be positive")
+    width = short_call.strike - long_call.strike
+    if debit >= width:
+        raise ValueError("spread debit must be below strike width")
     profile = call_debit_spread_profile(
         long_call.strike, short_call.strike, debit, long_call.multiplier
     )
@@ -56,7 +69,13 @@ def build_bull_call_spread(
         long_greeks.vega - short_greeks.vega,
         long_greeks.rho - short_greeks.rho,
     )
-    forecast_volatility = forecast_volatility or 0.20
+    forecast_volatility = 0.20 if forecast_volatility is None else forecast_volatility
+    if not isfinite(forecast_volatility) or forecast_volatility <= 0:
+        raise ValueError("forecast volatility must be positive and finite")
+    if realized_volatility is not None and (
+        not isfinite(realized_volatility) or realized_volatility < 0
+    ):
+        raise ValueError("realized volatility must be non-negative and finite")
     probability_profit = probability_above(
         spot, profile.break_even[0], time, forecast_volatility, model_drift
     )
@@ -99,7 +118,7 @@ def build_bull_call_spread(
         midpoint=(long_call.midpoint - short_call.midpoint),
         spread_pct=max(long_call.spread_pct, short_call.spread_pct),
         implied_volatility=(iv_long + iv_short) / 2,
-        realized_volatility=forecast_volatility,
+        realized_volatility=realized_volatility,
         forecast_volatility=forecast_volatility,
         expected_move=expected_move(spot, (iv_long + iv_short) / 2, dte),
         delta=net_greeks.delta,
@@ -123,6 +142,7 @@ def build_bull_call_spread(
             "European BSM benchmark",
             "real-world drift is explicitly configured",
             "executable debit uses long ask and short bid",
+            "realized volatility is unavailable unless supplied by a validated estimator",
             "research candidate only",
         ),
     )

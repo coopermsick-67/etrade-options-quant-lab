@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from math import exp, sqrt
+from math import exp, isfinite, sqrt
 
 import numpy as np
 
@@ -22,12 +22,16 @@ def price_american_option(
     """Price an American option with a CRR tree and early exercise."""
 
     option_type = OptionType(option_type)
-    if spot <= 0 or strike <= 0 or time < 0 or volatility <= 0 or steps < 1:
+    if any(not isfinite(value) for value in (spot, strike, time, rate, volatility, dividend_yield)):
+        raise PricingError("CRR inputs must be finite")
+    if spot <= 0 or strike <= 0 or time < 0 or volatility < 0 or steps < 1:
         raise PricingError("invalid CRR inputs")
     if time == 0:
         return (
             max(spot - strike, 0.0) if option_type is OptionType.CALL else max(strike - spot, 0.0)
         )
+    if volatility == 0:
+        raise PricingError("positive volatility is required when time remains")
     dt = time / steps
     up = exp(volatility * sqrt(dt))
     down = 1.0 / up

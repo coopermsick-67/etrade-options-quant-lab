@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import isfinite
 from uuid import uuid4
 
 from data.normalization.models import ContractType, OptionQuote
@@ -16,6 +17,7 @@ def build_long_option_candidate(
     option: OptionQuote,
     risk_free_rate: float = 0.04,
     forecast_volatility: float | None = None,
+    realized_volatility: float | None = None,
     model_drift: float = 0.0,
     transaction_costs: float = 0.65,
 ) -> Candidate:
@@ -28,9 +30,21 @@ def build_long_option_candidate(
     if premium <= 0:
         raise ValueError("executable premium must be positive")
     dte = option.dte()
-    time = max(dte, 1) / 365.0
-    iv = option.implied_volatility or 0.25
-    forecast_volatility = forecast_volatility or iv
+    if dte <= 0:
+        raise ValueError("option must have positive time to expiration")
+    time = dte / 365.0
+    iv = option.implied_volatility if option.implied_volatility is not None else 0.25
+    forecast_volatility = iv if forecast_volatility is None else forecast_volatility
+    if not isfinite(iv) or iv <= 0:
+        raise ValueError("implied volatility must be positive and finite")
+    if not isfinite(forecast_volatility) or forecast_volatility <= 0:
+        raise ValueError("forecast volatility must be positive and finite")
+    if realized_volatility is not None and (
+        not isfinite(realized_volatility) or realized_volatility < 0
+    ):
+        raise ValueError("realized volatility must be non-negative and finite")
+    if not isfinite(risk_free_rate) or not isfinite(model_drift) or transaction_costs < 0:
+        raise ValueError("rate, drift, and transaction costs are invalid")
     option_type = OptionType(option.option_type.value.lower())
     greeks = bs_greeks(spot, option.strike, time, risk_free_rate, iv, option_type)
     fair_value = bs_price(
@@ -72,7 +86,7 @@ def build_long_option_candidate(
         midpoint=option.midpoint,
         spread_pct=option.spread_pct,
         implied_volatility=iv,
-        realized_volatility=forecast_volatility,
+        realized_volatility=realized_volatility,
         forecast_volatility=forecast_volatility,
         expected_move=expected_move(spot, iv, dte),
         delta=greeks.delta,
@@ -93,6 +107,7 @@ def build_long_option_candidate(
             "European BSM benchmark",
             "long option uses ask as entry price",
             "probability is model-based, not delta",
+            "realized volatility is unavailable unless supplied by a validated estimator",
             "research candidate only",
         ),
     )

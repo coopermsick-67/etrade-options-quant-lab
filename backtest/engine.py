@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from math import isfinite
 
 from quant.statistics.metrics import PerformanceMetrics, calculate_performance
 
@@ -17,6 +18,27 @@ class HistoricalBar:
     option_bid: float
     option_ask: float
     multiplier: float = 100.0
+
+    def __post_init__(self) -> None:
+        if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
+            raise ValueError("historical bar timestamp must be timezone-aware")
+        for name, value in (
+            ("close", self.close),
+            ("option_mid", self.option_mid),
+            ("option_bid", self.option_bid),
+            ("option_ask", self.option_ask),
+            ("multiplier", self.multiplier),
+        ):
+            if not isfinite(value):
+                raise ValueError(f"{name} must be finite")
+        if self.close <= 0 or self.option_mid < 0 or self.option_bid < 0 or self.option_ask < 0:
+            raise ValueError("prices must be non-negative and close must be positive")
+        if self.option_ask < self.option_bid:
+            raise ValueError("option ask cannot be below bid")
+        if not self.option_bid <= self.option_mid <= self.option_ask:
+            raise ValueError("option midpoint must lie within the bid/ask market")
+        if self.multiplier <= 0:
+            raise ValueError("multiplier must be positive")
 
 
 @dataclass(frozen=True)
@@ -75,6 +97,17 @@ def run_simple_event_backtest(
 ) -> BacktestResult:
     if len(bars) < 2:
         raise ValueError("at least two bars are required")
+    if any(
+        previous.timestamp >= current.timestamp
+        for previous, current in zip(bars[:-1], bars[1:], strict=True)
+    ):
+        raise ValueError("historical bars must be strictly time-ordered")
+    if initial_equity <= 0 or not isfinite(initial_equity):
+        raise ValueError("initial equity must be positive and finite")
+    if slippage_bps < 0 or not isfinite(slippage_bps):
+        raise ValueError("slippage must be non-negative and finite")
+    if fee_per_contract < 0 or not isfinite(fee_per_contract):
+        raise ValueError("fee must be non-negative and finite")
     trades: list[BacktestTrade] = []
     equity = [initial_equity]
     open_trade: tuple[int, float] | None = None

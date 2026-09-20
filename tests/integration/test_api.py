@@ -47,3 +47,41 @@ def test_live_approval_is_disabled_by_default() -> None:
         }
     }
     assert client.post("/api/live/approval", json=payload).status_code == 403
+
+
+def test_paper_emergency_stop_is_persisted_in_the_broker_process() -> None:
+    enabled = client.post("/api/paper/emergency-stop", json={"enabled": True})
+    assert enabled.status_code == 200
+    assert enabled.json() == {"enabled": True}
+    blocked = client.post(
+        "/api/paper/orders",
+        json={
+            "symbol": "SPY-STOP-TEST",
+            "action": "BUY",
+            "quantity": 1,
+            "limit_price": 1.20,
+            "bid": 1.00,
+            "ask": 1.10,
+            "client_order_id": "api-stop-test",
+        },
+    )
+    assert blocked.status_code == 200
+    assert blocked.json()["status"] == "REJECTED"
+    assert client.post("/api/paper/emergency-stop", json={"enabled": False}).json() == {
+        "enabled": False
+    }
+
+
+def test_invalid_paper_quote_is_a_client_error_not_a_server_error() -> None:
+    response = client.post(
+        "/api/paper/orders",
+        json={
+            "symbol": "SPY-BAD-QUOTE",
+            "action": "BUY",
+            "quantity": 1,
+            "limit_price": 1.20,
+            "bid": 1.20,
+            "ask": 1.10,
+        },
+    )
+    assert response.status_code == 422

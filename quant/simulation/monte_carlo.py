@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from math import isfinite
 
 import numpy as np
 
@@ -43,6 +44,8 @@ def simulate_terminal_prices(
     model: str = "gbm",
     student_df: float = 5.0,
 ) -> np.ndarray:
+    if any(not isfinite(value) for value in (spot, drift, volatility, time)):
+        raise ValueError("spot, drift, volatility, and time must be finite")
     if spot <= 0 or volatility < 0 or time < 0 or paths < 1 or steps < 1:
         raise ValueError("invalid Monte Carlo inputs")
     if model not in {"gbm", "student_t"}:
@@ -80,6 +83,8 @@ def simulate_payoff(
     pnl = np.asarray(payoff(terminals), dtype=float)
     if pnl.shape != terminals.shape:
         raise ValueError("payoff must return one value per terminal price")
+    if not np.all(np.isfinite(pnl)):
+        raise ValueError("payoff must return finite values")
     return MonteCarloResult(terminals, pnl, seed, model, paths, steps)
 
 
