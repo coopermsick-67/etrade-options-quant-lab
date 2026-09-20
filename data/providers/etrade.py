@@ -124,30 +124,43 @@ class ETradeMarketDataProvider:
             expiryDay=expiration.day,
         )
         root = _root(payload, "OptionChainResponse")
-        pairs = root.get("OptionPair", [])
+        pairs = root.get("OptionPair", root.get("optionPairs", root.get("OptionPairs", [])))
         if not isinstance(pairs, list):
             raise ETradeMarketDataError("E*TRADE returned an invalid option-pair list")
         result: list[OptionQuote] = []
         for pair in pairs:
             if not isinstance(pair, dict):
                 continue
-            strike_raw = _first(pair, "strikePrice", "strike")
-            strike = _as_float(strike_raw, "strikePrice", allow_none=True)
-            if strike is None or strike <= 0:
-                continue
-            for option_type, field_name in ((ContractType.CALL, "Call"), (ContractType.PUT, "Put")):
-                raw = pair.get(field_name, pair.get(field_name.lower()))
+            for option_type, field_names in (
+                (ContractType.CALL, ("Call", "call", "optioncall", "OptionCall")),
+                (ContractType.PUT, ("Put", "put", "optionPut", "OptionPut")),
+            ):
+                raw = next((pair.get(field) for field in field_names if field in pair), None)
                 if not isinstance(raw, dict):
                     continue
                 try:
+                    strike_raw = _first(raw, "strikePrice", "strike")
+                    if strike_raw is None:
+                        strike_raw = _first(pair, "strikePrice", "strike")
+                    strike = _as_float(strike_raw, "strikePrice", allow_none=True)
+                    if strike is None or strike <= 0:
+                        continue
                     bid = _as_float(_first(raw, "bid", "bidPrice"), "bid")
                     ask = _as_float(_first(raw, "ask", "askPrice"), "ask")
                     if bid is None or ask is None or bid < 0 or ask < bid:
                         continue
-                    greeks = raw.get("OptionGreeks", raw.get("optionGreeks", {}))
+                    greeks = raw.get(
+                        "OptionGreeks", raw.get("optionGreeks", raw.get("optionGreek", {}))
+                    )
                     if not isinstance(greeks, dict):
                         greeks = {}
-                    iv = _as_float(_first(raw, "iv", "impliedVolatility"), "iv", allow_none=True)
+                    iv = _as_float(
+                        _first(raw, "iv", "impliedVolatility")
+                        if _first(raw, "iv", "impliedVolatility") is not None
+                        else _first(greeks, "iv", "impliedVolatility"),
+                        "iv",
+                        allow_none=True,
+                    )
                     if iv is not None and iv > 3:
                         iv /= 100
                     timestamp = _timestamp(
@@ -193,6 +206,29 @@ class ETradeMarketDataProvider:
         if pairs and not result:
             raise ETradeMarketDataError("E*TRADE option chain contained no valid current quotes")
         return result
+
+    def get_expirations(self, symbol: str) -> list[date]:
+        symbol = symbol.strip().upper()
+        if not symbol:
+            raise ValueError("symbol is required")
+        payload = self.client.get_option_expirations(symbol)
+        root = _root(payload, "OptionExpireDateResponse")
+        rows = root.get("ExpirationDate", root.get("expirationDates", []))
+        if isinstance(rows, dict):
+            rows = [rows]
+        if not isinstance(rows, list):
+            raise ETradeMarketDataError("E*TRADE returned an invalid expiration list")
+        result: list[date] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            try:
+                value = date(int(row["year"]), int(row["month"]), int(row["day"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if value >= date.today():
+                result.append(value)
+        return sorted(set(result))
 
     def get_history(self, symbol: str, limit: int = 252) -> list[float]:
         raise ETradeMarketDataError(

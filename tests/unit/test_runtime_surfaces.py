@@ -112,6 +112,36 @@ def test_etrade_market_data_adapter_normalizes_documented_shapes() -> None:
     assert put.delta == -0.5
 
 
+def test_etrade_adapter_reads_official_option_pair_strikes_and_json_keys() -> None:
+    class OfficialShapeClient(FakeETradeClient):
+        def get_option_chain(
+            self, symbol: str, expiry_year: int, expiry_month: int, **params: object
+        ) -> dict[str, object]:
+            return {
+                "OptionChainResponse": {
+                    "optionPairs": [
+                        {
+                            "optioncall": {
+                                "strikePrice": 550,
+                                "symbol": "SPY---261218C00550000",
+                                "bid": 5,
+                                "ask": 5.2,
+                                "volume": 1,
+                                "openInterest": 2,
+                                "optionGreek": {"iv": 0.25, "delta": 0.5},
+                            }
+                        }
+                    ]
+                }
+            }
+
+    provider = ETradeMarketDataProvider(OfficialShapeClient())  # type: ignore[arg-type]
+    chain = provider.get_option_chain("SPY", date(2026, 12, 18))
+    assert len(chain) == 1
+    assert chain[0].strike == 550
+    assert chain[0].implied_volatility == 0.25
+
+
 def test_etrade_adapter_does_not_invent_historical_bars() -> None:
     provider = ETradeMarketDataProvider(FakeETradeClient())  # type: ignore[arg-type]
     try:

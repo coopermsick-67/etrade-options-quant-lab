@@ -13,7 +13,27 @@ from apps.api.settings import Settings
 from brokers.paper.broker import PaperBroker
 
 
-def market_data_status(settings: Settings) -> dict[str, Any]:
+def market_data_status(settings: Settings, connection_manager: Any | None = None) -> dict[str, Any]:
+    if connection_manager is not None:
+        etrade_status = connection_manager.status(settings)
+        if etrade_status["configured"]:
+            return {
+                "provider": "etrade",
+                "status": etrade_status["status"],
+                "configured": True,
+                "source": etrade_status["source"],
+                "quote_timestamp": None,
+                "message": etrade_status["message"],
+            }
+        if settings.market_data_provider == "etrade" or etrade_status["consumer_credentials_ready"]:
+            return {
+                "provider": "etrade",
+                "status": etrade_status["status"],
+                "configured": False,
+                "source": None,
+                "quote_timestamp": None,
+                "message": etrade_status["message"],
+            }
     required = (
         settings.etrade_consumer_key,
         settings.etrade_consumer_secret,
@@ -65,12 +85,14 @@ def _position_risk(positions: list[dict[str, object]]) -> float:
     return total
 
 
-def build_runtime_dashboard(paper_broker: PaperBroker, settings: Settings) -> dict[str, Any]:
+def build_runtime_dashboard(
+    paper_broker: PaperBroker, settings: Settings, connection_manager: Any | None = None
+) -> dict[str, Any]:
     positions = list(paper_broker.positions())
     orders = list(paper_broker.orders())
     equity = paper_broker.equity()
     open_risk = _position_risk(positions)
-    data_status = market_data_status(settings)
+    data_status = market_data_status(settings, connection_manager)
     initial_equity = paper_broker.initial_equity
     paper_pnl = equity - initial_equity
     loss_amount = max(0.0, -paper_pnl)

@@ -10,8 +10,10 @@ It is designed to answer **“Do I actually have a repeatable options-trading ed
 - LIVE mode is disabled by default.
 - The quantitative core includes Black-Scholes-Merton, American CRR pricing, Greeks, IV inversion, volatility estimators, Bayesian updating, Monte Carlo, payoff math, risk sizing, portfolio Greeks, and performance metrics.
 - E*TRADE integration is adapter-based and uses the documented OAuth 1.0a lifecycle plus REST account/market/order endpoints. The live adapter is additionally gated by a single-use, short-lived human approval token; the shipped API keeps live approval UI disabled until authenticated review is implemented.
+- The Connections page now provides a server-side E*TRADE OAuth handoff, masked account verification, expiration discovery, and a truthful Robinhood capability boundary. OAuth access secrets remain in the API process and are never returned to the browser.
 - Robinhood live options trading is disabled because no official public brokerage-options API was verified in the current official developer documentation. Unofficial endpoints and browser automation are intentionally excluded.
 - The UI launches in PAPER mode without broker credentials, but it does not fabricate quotes, candidates, or performance. Without a configured provider it shows explicit empty states.
+- The Backtests page accepts validated point-in-time option-quote CSVs and supports full-range, 30-day, 3-month, 6-month, 1-year, 3-year, and custom windows. It does not download or fabricate historical option data.
 
 This is an implemented research MVP with explicit follow-on boundaries. It does not bundle point-in-time historical option chains, claim a trading edge, or present demo results as live performance.
 
@@ -121,6 +123,7 @@ Start with:
 
 - [Robinhood capability report](docs/ROBINHOOD_CAPABILITY_REPORT.md)
 - [E*TRADE integration](docs/ETRADE_INTEGRATION.md)
+- [Broker connections](docs/ETRADE_INTEGRATION.md#local-connection-workflow)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Quantitative math](docs/QUANTITATIVE_MATH.md)
 - [Risk policy](docs/RISK_POLICY.md)

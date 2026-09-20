@@ -150,6 +150,10 @@ def run_simple_event_backtest(
             )
         )
         equity.append(equity[-1] + pnl)
+    if len(equity) == 1:
+        # A valid no-trade run is still a result. Keep two observations so
+        # performance metrics can report a flat curve instead of crashing.
+        equity.append(equity[-1])
     pnl_values = [trade.pnl for trade in trades]
     metrics = calculate_performance(equity, pnl_values)
     return BacktestResult(tuple(equity), tuple(trades), metrics, fill_model, True)

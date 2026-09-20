@@ -9,6 +9,12 @@ test("frontend keeps paper/live boundary and real data boundary visible", () => 
   assert.match(source, /NO FABRICATED DATA/);
   assert.match(source, /api\/paper\/orders/);
   assert.match(source, /api\/market\/option-chain/);
+  assert.match(source, /api\/connections\/etrade\/start/);
+  assert.match(source, /api\/connections\/etrade\/complete/);
+  assert.match(source, /api\/backtests\/datasets\/import/);
+  assert.match(source, /api\/backtests\/run/);
+  assert.match(source, /custom/);
+  assert.match(source, /Robinhood/);
   assert.match(source, /api\/scanner/);
   assert.doesNotMatch(source, /ETradeLiveBroker\.submit/);
   assert.doesNotMatch(source, /fallbackDashboard/);

@@ -21,6 +21,8 @@ build/
 generated_images/
 *.sqlite3
 *.db
+data/historical/*
+!data/historical/.gitkeep
 coverage.xml
 *.tsbuildinfo
 playwright-report/

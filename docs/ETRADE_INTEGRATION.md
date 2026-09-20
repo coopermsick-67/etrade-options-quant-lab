@@ -17,9 +17,32 @@ E*TRADE publicly documents a REST API using OAuth 1.0a. The getting-started guid
 
 The sandbox is documented as a syntax/deserialization test environment using stored responses. It does not execute real transactions and does not provide current market data. The application therefore uses an internal `PaperBroker` for realistic simulation and treats E*TRADE sandbox as an integration test target, not as a performance simulator.
 
+## Local connection workflow
+
+The dashboard's **Connections** page implements the documented OAuth handoff
+for a local single-user process:
+
+1. Set `ETRADE_ENV`, `ETRADE_CONSUMER_KEY`, and `ETRADE_CONSUMER_SECRET` in the
+   server-side `.env` file. Use separate sandbox and production keys.
+2. Click **Start E*TRADE OAuth**. The API requests a temporary token and opens
+   the documented E*TRADE authorization URL.
+3. Authorize the application at E*TRADE and paste only the returned verifier
+   code into the page.
+4. The API exchanges the verifier for an access token, keeps the token secret
+   server-side in process memory, and exposes only status and masked account
+   identifiers to the browser.
+5. Use **Verify account access** before loading expirations, quotes, or chains.
+
+Pending OAuth state expires after the configured TTL (10 minutes by default),
+is single-use after completion, and is cleared on disconnect. This local
+implementation intentionally does not persist OAuth secrets. A deployment
+needs an encrypted server-side secret store, authenticated local users, CSRF
+protection, and explicit session management before it should be exposed beyond
+the local machine.
+
 ## Live execution policy in this repository
 
-The public agreement reviewed here does document restrictions around confidentiality, market-data redistribution, API use, security, and E*TRADE’s right to reject orders. The accessible public text did not provide a definitive universal statement about algorithmic order generation. This repository therefore makes the safer product-policy choice required by the project specification: live actions are human-approved only, even if a particular account agreement might permit more automation.
+The public agreement reviewed here documents restrictions around confidentiality, market-data redistribution, API use, security, and E*TRADE’s right to reject orders. The accessible public text did not provide a definitive universal statement about algorithmic order generation. This repository therefore makes the safer product-policy choice required by the project specification: live actions are human-approved only, even if a particular account agreement might permit more automation.
 
 Live submission is disabled unless all of the following hold:
 

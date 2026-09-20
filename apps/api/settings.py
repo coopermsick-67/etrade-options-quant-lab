@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # for the operational UI. Configure ``etrade`` only after the OAuth tokens
     # and account permissions have been obtained through the documented flow.
     market_data_provider: str = "none"
+    historical_data_dir: str = "data/historical"
+    backtest_upload_max_bytes: int = Field(default=50_000_000, gt=0, le=500_000_000)
+    etrade_oauth_pending_ttl_seconds: int = Field(default=600, gt=60, le=3600)
     quote_stale_seconds: float = Field(default=120, gt=0)
     paper_initial_equity: float = Field(default=10_000, gt=0)
     paper_slippage_bps: float = Field(default=15, ge=0)
